@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.util.Date;
 
 @Entity
-@Table(name = "users")
+@Table(name = "app_users")
 @Inheritance(strategy = InheritanceType.JOINED)
 public class User {
 
@@ -16,10 +16,11 @@ public class User {
     private String mdp;
 
     @Temporal(TemporalType.DATE)
+    @Column(name = "date_inscription")
     private Date dateInscription;
 
-    @Enumerated(EnumType.STRING)
-    private Role role;
+    @Column(name = "user_role")
+    private String role;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -29,6 +30,6 @@ public class User {
     public void setMdp(String mdp) { this.mdp = mdp; }
     public Date getDateInscription() { return dateInscription; }
     public void setDateInscription(Date d) { this.dateInscription = d; }
-    public Role getRole() { return role; }
-    public void setRole(Role role) { this.role = role; }
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
 }

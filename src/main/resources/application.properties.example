@@ -1,0 +1,31 @@
+# ==================== ORACLE DATABASE ====================
+spring.datasource.url=jdbc:oracle:thin:@localhost:1521/XEPDB1
+spring.datasource.username=EVENTSPHERE
+spring.datasource.password=YOUR_ORACLE_PASSWORD
+spring.datasource.driver-class-name=oracle.jdbc.OracleDriver
+
+spring.jpa.database-platform=org.hibernate.dialect.OracleDialect
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=false
+
+# ==================== JWT ====================
+jwt.secret=eventsphere2024SecretKeyPourJWTMinimum256BitsObligatoire!
+jwt.expiration=86400000
+
+# ==================== EMAIL (Brevo REST API) ====================
+app.brevo.api-key=YOUR_BREVO_API_KEY
+app.mail.from=YOUR_EMAIL@gmail.com
+
+# ==================== GOOGLE OAUTH2 ====================
+spring.security.oauth2.client.registration.google.client-id=YOUR_GOOGLE_CLIENT_ID
+spring.security.oauth2.client.registration.google.client-secret=YOUR_GOOGLE_CLIENT_SECRET
+spring.security.oauth2.client.registration.google.scope=email,profile
+spring.security.oauth2.client.registration.google.redirect-uri=http://localhost:8080/login/oauth2/code/google
+
+# ==================== APP ====================
+app.frontend-url=http://localhost:3000
+app.otp.expiration-minutes=10
+
+# ==================== EVENT MICROSERVICE ====================
+# ASP.NET Core event service must be running on this port
+event-service.url=http://localhost:5104

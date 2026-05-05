@@ -1,5 +1,7 @@
 package com.example.eventsphere.security;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
@@ -12,6 +14,7 @@ import org.springframework.security.web.*;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.*;
 import java.util.List;
+import java.util.Map;
 
 @Configuration
 @EnableWebSecurity
@@ -26,34 +29,63 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        // Routes publiques du front
-                        .requestMatchers(
-                                "/auth/register",          // Visiteur (image 1)
-                                "/auth/register/verified", // Visiteur vérifié (image 2)
-                                "/auth/login",             // Login (image 3)
-                                "/auth/forgot-password",   // Forgot password (image 4)
-                                "/auth/verify-otp",        // OTP (image 5)
-                                "/auth/resend-otp",        // Renvoyer OTP
-                                "/auth/reset-password",    // Reset password
-                                "/auth/oauth2/**",         // Google OAuth2
-                                "/uploads/**"              // Fichiers uploadés
-                        ).permitAll()
-                        // Tout le reste requiert un JWT valide
-                        .anyRequest().authenticated()
-                )
-                // Google OAuth2 Login
-                .oauth2Login(oauth2 -> oauth2
-                        .redirectionEndpoint(endpoint ->
-                                endpoint.baseUri("/auth/oauth2/callback/*"))
-                        .successHandler(oAuth2SuccessHandler)
-                )
-                // Filtre JWT avant chaque requête
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+            .csrf(csrf -> csrf.disable())
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(
+                    "/auth/register",
+                    "/auth/register/verified",
+                    "/auth/login",
+                    "/auth/forgot-password",
+                    "/auth/verify-otp",
+                    "/auth/resend-otp",
+                    "/auth/reset-password",
+                    "/auth/google-token",
+                    "/auth/test-email",
+                    "/auth/oauth2/**",
+                    "/oauth2/**",
+                    "/login/oauth2/**",
+                    "/uploads/**",
+                    "/error"
+                ).permitAll()
+                .requestMatchers("/admin/**").hasRole("ADMIN")
+                .requestMatchers(
+                    org.springframework.http.HttpMethod.GET,
+                    "/events", "/events/*", "/events/search",
+                    "/events/categories", "/events/upcoming", "/events/free",
+                    "/events/organizer/*", "/tickettypes/event/*",
+                    "/localisations"
+                ).permitAll()
+                .requestMatchers("/events/**", "/tickettypes/**").authenticated()
+                .requestMatchers("/billets/**").authenticated()
+                .requestMatchers("/localisations/**").authenticated()
+                .requestMatchers("/stats/**").authenticated()
+                .anyRequest().authenticated()
+            )
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint((req, res, e) -> {
+                    res.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    res.setContentType("application/json;charset=UTF-8");
+                    res.getWriter().write(new ObjectMapper().writeValueAsString(
+                        Map.of("success", false, "message", "Token manquant ou invalide. Veuillez vous connecter.", "data", "")
+                    ));
+                })
+                .accessDeniedHandler((req, res, e) -> {
+                    res.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                    res.setContentType("application/json;charset=UTF-8");
+                    res.getWriter().write(new ObjectMapper().writeValueAsString(
+                        Map.of("success", false, "message", "Accès refusé. Droits insuffisants.", "data", "")
+                    ));
+                })
+            )
+            .oauth2Login(oauth2 -> oauth2
+                .redirectionEndpoint(endpoint ->
+                    endpoint.baseUri("/login/oauth2/callback/*"))
+                .successHandler(oAuth2SuccessHandler)
+            )
+            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

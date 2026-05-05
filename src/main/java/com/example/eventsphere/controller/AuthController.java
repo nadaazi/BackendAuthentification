@@ -1,235 +1,149 @@
 package com.example.eventsphere.controller;
 
+import com.example.eventsphere.dto.request.*;
+import com.example.eventsphere.dto.response.*;
 import com.example.eventsphere.service.AuthService;
+import com.example.eventsphere.service.EmailService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import java.util.List;
+import org.springframework.web.client.RestTemplate;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
 
-    @Autowired
-    private AuthService authService;
+    @Autowired private AuthService authService;
+    @Autowired private EmailService emailService;
 
-    // ──────────────────────────────────────────────────────────
-    // POST /auth/register
-    // Image 1 du front : Inscription Visiteur normal
-    // Body : { "nomComplet": "...", "email": "...", "motDePasse": "..." }
-    // → Crée le compte avec rôle VISITEUR + envoie OTP par email
-    // ──────────────────────────────────────────────────────────
+    // POST /auth/register — Inscription Visiteur
     @PostMapping("/register")
-    public ResponseEntity<?> inscrireVisiteur(@RequestBody Map<String, String> body) {
-        try {
-            authService.inscrireVisiteur(
-                body.get("nomComplet"),
-                body.get("email"),
-                body.get("motDePasse")
-            );
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Compte créé ! Vérifiez votre email pour le code OTP."
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "message", e.getMessage()
-            ));
+    public ResponseEntity<ApiResponse<String>> register(@Valid @RequestBody RegisterRequest req) {
+        String fallbackOtp = authService.inscrireVisiteur(req.getNomComplet(), req.getEmail(), req.getMotDePasse());
+        if (fallbackOtp != null) {
+            return ResponseEntity.ok(ApiResponse.ok(
+                "Compte créé ! Email non livré — code OTP : " + fallbackOtp, fallbackOtp));
         }
+        return ResponseEntity.ok(ApiResponse.ok("Compte créé ! Vérifiez votre email pour le code OTP.", null));
     }
 
-    // ──────────────────────────────────────────────────────────
-    // POST /auth/register/verified
-    // Image 2 du front : Inscription Visiteur Vérifié
-    // Body : { "nomComplet": "...", "email": "...", "telephone": "...", "documentIdentitePath": "..." }
-    // Note : le fichier est uploadé séparément via /auth/upload-document
-    // ──────────────────────────────────────────────────────────
+    // POST /auth/register/verified — Inscription Visiteur Vérifié
     @PostMapping("/register/verified")
-    public ResponseEntity<?> inscrireVisiteurVerifie(@RequestBody Map<String, String> body) {
-        try {
-            authService.inscrireVisiteurVerifie(
-                body.get("nomComplet"),
-                body.get("email"),
-                body.get("telephone"),
-                body.get("documentIdentitePath")
-            );
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Compte créé ! Vérifiez votre email pour le code OTP."
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "message", e.getMessage()
-            ));
+    public ResponseEntity<ApiResponse<String>> registerVerified(@Valid @RequestBody RegisterVerifiedRequest req) {
+        String fallbackOtp = authService.inscrireVisiteurVerifie(
+                req.getNomComplet(), req.getEmail(),
+                req.getTelephone(), req.getDocumentIdentitePath());
+        if (fallbackOtp != null) {
+            return ResponseEntity.ok(ApiResponse.ok(
+                "Compte créé ! Email non livré — code OTP : " + fallbackOtp, fallbackOtp));
         }
+        return ResponseEntity.ok(ApiResponse.ok("Compte créé ! Vérifiez votre email pour le code OTP.", null));
     }
 
-    // ──────────────────────────────────────────────────────────
-    // POST /auth/login
-    // Image 3 du front : Connexion par email + mot de passe
-    // Body : { "email": "...", "motDePasse": "..." }
-    // → Retourne { token, nomComplet, email, role, emailVerifie }
-    // ──────────────────────────────────────────────────────────
+    // POST /auth/login — Connexion
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody Map<String, String> body) {
-        try {
-            Map<String, Object> result = authService.login(
-                body.get("email"),
-                body.get("motDePasse")
-            );
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            return ResponseEntity.status(401).body(Map.of(
-                "success", false,
-                "message", e.getMessage()
-            ));
-        }
+    public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest req) {
+        AuthResponse auth = authService.login(req.getEmail(), req.getMotDePasse());
+        return ResponseEntity.ok(ApiResponse.ok("Connexion réussie.", auth));
     }
 
-    // ──────────────────────────────────────────────────────────
-    // POST /auth/verify-otp
-    // Image 5 du front : Vérification du code OTP 6 chiffres
-    // Body : { "email": "...", "otpCode": "123456" }
-    // → Si valide : retourne JWT + marque email comme vérifié
-    // ──────────────────────────────────────────────────────────
+    // POST /auth/verify-otp — Vérification OTP
     @PostMapping("/verify-otp")
-    public ResponseEntity<?> verifierOtp(@RequestBody Map<String, String> body) {
-        try {
-            Map<String, Object> result = authService.verifierOtp(
-                body.get("email"),
-                body.get("otpCode")
-            );
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "message", e.getMessage()
-            ));
-        }
+    public ResponseEntity<ApiResponse<AuthResponse>> verifyOtp(@Valid @RequestBody OtpRequest req) {
+        AuthResponse auth = authService.verifierOtp(req.getEmail(), req.getOtpCode());
+        return ResponseEntity.ok(ApiResponse.ok("Email vérifié avec succès.", auth));
     }
 
-    // ──────────────────────────────────────────────────────────
-    // POST /auth/resend-otp
-    // Image 5 du front : Bouton "Resend code"
-    // Body : { "email": "..." }
-    // → Supprime l'ancien OTP et en envoie un nouveau
-    // ──────────────────────────────────────────────────────────
+    // POST /auth/resend-otp — Renvoi OTP
     @PostMapping("/resend-otp")
-    public ResponseEntity<?> renvoyerOtp(@RequestBody Map<String, String> body) {
-        try {
-            authService.renvoyerOtp(body.get("email"));
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Un nouveau code a été envoyé à votre email."
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "message", e.getMessage()
-            ));
+    public ResponseEntity<ApiResponse<String>> resendOtp(@Valid @RequestBody EmailRequest req) {
+        String fallbackOtp = authService.renvoyerOtp(req.getEmail());
+        if (fallbackOtp != null) {
+            return ResponseEntity.ok(ApiResponse.ok(
+                "Email non livré — code OTP : " + fallbackOtp, fallbackOtp));
         }
+        return ResponseEntity.ok(ApiResponse.ok("Un nouveau code a été envoyé à votre email.", null));
     }
 
-    // ──────────────────────────────────────────────────────────
-    // POST /auth/forgot-password
-    // Image 4 du front : "Trouble logging in?" → "Send Login Link"
-    // Body : { "email": "..." }
-    // → Envoie un email avec lien de reset
-    // ──────────────────────────────────────────────────────────
+    // POST /auth/forgot-password — Demande de reset
     @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> body) {
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody EmailRequest req) {
         try {
-            authService.demanderResetPassword(body.get("email"));
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Un lien de réinitialisation a été envoyé à votre email."
-            ));
-        } catch (Exception e) {
-            // On retourne toujours "success" pour ne pas révéler si l'email existe
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Si cet email existe, un lien vous a été envoyé."
-            ));
+            authService.demanderResetPassword(req.getEmail());
+        } catch (Exception ignored) {
+            // Sécurité : ne pas révéler si l'email existe
         }
+        return ResponseEntity.ok(ApiResponse.ok("Si cet email existe, un lien vous a été envoyé."));
     }
 
-    // ──────────────────────────────────────────────────────────
-    // POST /auth/reset-password
-    // Après clic sur le lien reçu par email
-    // Body : { "token": "...", "nouveauMotDePasse": "..." }
-    // ──────────────────────────────────────────────────────────
+    // POST /auth/reset-password — Réinitialisation
     @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> body) {
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest req) {
+        authService.reinitialiserMotDePasse(req.getToken(), req.getNouveauMotDePasse());
+        return ResponseEntity.ok(ApiResponse.ok("Mot de passe réinitialisé avec succès !"));
+    }
+
+    // POST /auth/google-token — Google OAuth via frontend
+    @PostMapping("/google-token")
+    public ResponseEntity<ApiResponse<AuthResponse>> googleToken(@RequestBody Map<String, String> body) {
         try {
-            authService.reinitialiserMotDePasse(
-                body.get("token"),
-                body.get("nouveauMotDePasse")
-            );
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Mot de passe réinitialisé avec succès !"
-            ));
+            String url;
+            @SuppressWarnings("unchecked")
+            Map<String, String> info;
+            RestTemplate rest = new RestTemplate();
+
+            if (body.containsKey("accessToken")) {
+                url = "https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + body.get("accessToken");
+                info = rest.getForObject(url, Map.class);
+                if (info != null) info.put("sub", info.get("id"));
+            } else {
+                String idToken = body.get("idToken");
+                if (idToken == null || idToken.isBlank())
+                    return ResponseEntity.badRequest().body(ApiResponse.error("Token manquant."));
+                url = "https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken;
+                info = rest.getForObject(url, Map.class);
+            }
+
+            if (info == null || !info.containsKey("email"))
+                return ResponseEntity.badRequest().body(ApiResponse.error("Token Google invalide."));
+
+            AuthResponse auth = authService.loginOuCreerViaGoogle(
+                info.get("email"), info.get("name"), info.get("sub"));
+            return ResponseEntity.ok(ApiResponse.ok("Connexion Google réussie.", auth));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "message", e.getMessage()
-            ));
+            return ResponseEntity.badRequest().body(ApiResponse.error("Erreur Google : " + e.getMessage()));
         }
     }
 
-    // ──────────────────────────────────────────────────────────
-    // POST /auth/setup/interests
-    // Images 6 et 8 du front : Étape 1 - sélection des intérêts
-    // Header : Authorization: Bearer <JWT>
-    // Body : { "interets": ["Music", "Technology", "Photography"] }
-    // ──────────────────────────────────────────────────────────
+    // POST /auth/setup/interests — Intérêts (JWT requis)
     @PostMapping("/setup/interests")
-    public ResponseEntity<?> sauvegarderInterets(
+    public ResponseEntity<ApiResponse<Void>> saveInterests(
             @AuthenticationPrincipal String email,
-            @RequestBody Map<String, List<String>> body) {
-        try {
-            authService.sauvegarderInterets(email, body.get("interets"));
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Intérêts sauvegardés."
-            ));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "message", e.getMessage()
-            ));
-        }
+            @Valid @RequestBody InterestsRequest req) {
+        authService.sauvegarderInterets(email, req.getInterets());
+        return ResponseEntity.ok(ApiResponse.ok("Intérêts sauvegardés."));
     }
 
-    // ──────────────────────────────────────────────────────────
-    // POST /auth/setup/preferences
-    // Image 7 du front : Étape 2 - type d'événement + localisation
-    // Header : Authorization: Bearer <JWT>
-    // Body : { "typeEvent": "BOTH", "ville": "Casablanca" }
-    // ──────────────────────────────────────────────────────────
+    // POST /auth/setup/preferences — Préférences (JWT requis)
     @PostMapping("/setup/preferences")
-    public ResponseEntity<?> sauvegarderPreferences(
+    public ResponseEntity<ApiResponse<Void>> savePreferences(
             @AuthenticationPrincipal String email,
-            @RequestBody Map<String, String> body) {
+            @Valid @RequestBody PreferencesRequest req) {
+        authService.sauvegarderPreferences(email, req.getTypeEvent(), req.getVille());
+        return ResponseEntity.ok(ApiResponse.ok("Profil complété avec succès !"));
+    }
+
+    // GET /auth/test-email?to=xxx@gmail.com — Test SMTP (développement uniquement)
+    @GetMapping("/test-email")
+    public ResponseEntity<ApiResponse<Void>> testEmail(@RequestParam String to) {
         try {
-            authService.sauvegarderPreferences(
-                email,
-                body.get("typeEvent"),
-                body.get("ville")
-            );
-            return ResponseEntity.ok(Map.of(
-                "success", true,
-                "message", "Profil complété avec succès !"
-            ));
+            emailService.envoyerOtpVerification(to, "Test User", "123456");
+            return ResponseEntity.ok(ApiResponse.ok("Email de test envoyé à " + to + ". Vérifiez votre boîte et les logs."));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "success", false,
-                "message", e.getMessage()
-            ));
+            return ResponseEntity.internalServerError().body(ApiResponse.error("Erreur SMTP : " + e.getMessage()));
         }
     }
 }

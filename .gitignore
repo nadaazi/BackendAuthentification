@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Sensitive config ###
+src/main/resources/application.properties
+
+### Misc ###
+output.txt
+uploads/

@@ -4,77 +4,65 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import java.io.File;
 import java.nio.file.*;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/auth")
 public class FileUploadController {
 
-    // Dossier où les documents seront stockés sur le serveur
     @Value("${app.upload-dir:uploads/documents}")
     private String uploadDir;
 
-    // ──────────────────────────────────────────────────────────
-    // POST /auth/upload-document
-    // Image 2 du front : Upload du document d'identité
-    // pour le Visiteur Vérifié (Passport, CIN, Permis)
-    //
-    // Étapes frontend :
-    //   1. L'utilisateur clique "Browse" ou drag & drop
-    //   2. Le front appelle cet endpoint
-    //   3. Reçoit { "filePath": "uploads/documents/xxx.jpg" }
-    //   4. Utilise ce filePath dans /auth/register/verified
-    // ──────────────────────────────────────────────────────────
-    @PostMapping("/upload-document")
+    private static final Set<String> ALLOWED_TYPES = Set.of("image/png", "image/jpeg", "application/pdf");
+    private static final long MAX_SIZE = 10 * 1024 * 1024; // 10MB
+
+    // POST /auth/upload-document  (used by verified visitor registration)
+    @PostMapping("/auth/upload-document")
     public ResponseEntity<?> uploadDocument(@RequestParam("file") MultipartFile file) {
+        return handleUpload(file);
+    }
+
+    // POST /uploads/document  (alias used by frontend)
+    @PostMapping("/uploads/document")
+    public ResponseEntity<?> uploadDocumentAlias(@RequestParam("file") MultipartFile file) {
+        return handleUpload(file);
+    }
+
+    private ResponseEntity<?> handleUpload(MultipartFile file) {
         try {
-            // Vérifier le type de fichier (PNG, JPG, PDF uniquement - comme indiqué dans l'UI)
+            if (file == null || file.isEmpty())
+                return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Aucun fichier reçu."));
+
             String contentType = file.getContentType();
-            if (contentType == null || (!contentType.equals("image/png")
-                    && !contentType.equals("image/jpeg")
-                    && !contentType.equals("application/pdf"))) {
-                return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "message", "Format non supporté. Utilisez PNG, JPG ou PDF."
-                ));
-            }
+            if (contentType == null || !ALLOWED_TYPES.contains(contentType))
+                return ResponseEntity.badRequest().body(Map.of("success", false,
+                        "message", "Format non supporté. Utilisez PNG, JPG ou PDF."));
 
-            // Vérifier la taille (max 10MB comme indiqué dans l'UI)
-            if (file.getSize() > 10 * 1024 * 1024) {
-                return ResponseEntity.badRequest().body(Map.of(
-                    "success", false,
-                    "message", "Fichier trop grand. Maximum 10MB."
-                ));
-            }
+            if (file.getSize() > MAX_SIZE)
+                return ResponseEntity.badRequest().body(Map.of("success", false,
+                        "message", "Fichier trop grand. Maximum 10MB."));
 
-            // Créer le dossier si nécessaire
             Path uploadPath = Paths.get(uploadDir);
-            if (!Files.exists(uploadPath)) {
-                Files.createDirectories(uploadPath);
-            }
+            if (!Files.exists(uploadPath)) Files.createDirectories(uploadPath);
 
-            // Nom unique pour éviter les collisions
             String extension = getExtension(file.getOriginalFilename());
-            String fileName = UUID.randomUUID().toString() + "." + extension;
+            String fileName = "cin_" + UUID.randomUUID() + "." + extension;
             Path filePath = uploadPath.resolve(fileName);
-
-            // Sauvegarder le fichier
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
             String savedPath = uploadDir + "/" + fileName;
             return ResponseEntity.ok(Map.of(
                 "success", true,
                 "filePath", savedPath,
-                "message", "Document uploadé avec succès."
+                "path", savedPath,
+                "filename", fileName,
+                "message", "Carte nationale uploadée avec succès."
             ));
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Map.of(
-                "success", false,
-                "message", "Erreur lors de l'upload : " + e.getMessage()
-            ));
+            return ResponseEntity.internalServerError().body(Map.of("success", false,
+                    "message", "Erreur upload : " + e.getMessage()));
         }
     }
 

@@ -5,7 +5,7 @@ import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import java.security.Key;
-import java.util.Date;
+import java.util.*;
 
 @Component
 public class JwtUtils {
@@ -20,11 +20,16 @@ public class JwtUtils {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
-    // Génère un token JWT avec email + rôle
-    public String generateToken(String email, String role) {
+    public String generateToken(String email, String role, Long id, String typeEvent, String ville) {
+        Map<String, Object> preference = new HashMap<>();
+        preference.put("typeEvent", typeEvent != null ? typeEvent : "BOTH");
+        preference.put("ville", ville);
+
         return Jwts.builder()
                 .setSubject(email)
                 .claim("role", role)
+                .claim("id", id)
+                .claim("preference", preference)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getKey(), SignatureAlgorithm.HS256)
@@ -36,6 +41,20 @@ public class JwtUtils {
                 .setSigningKey(getKey()).build()
                 .parseClaimsJws(token)
                 .getBody().getSubject();
+    }
+
+    public Long getIdFromToken(String token) {
+        return ((Number) Jwts.parserBuilder()
+                .setSigningKey(getKey()).build()
+                .parseClaimsJws(token)
+                .getBody().get("id")).longValue();
+    }
+
+    public String getRoleFromToken(String token) {
+        return (String) Jwts.parserBuilder()
+                .setSigningKey(getKey()).build()
+                .parseClaimsJws(token)
+                .getBody().get("role");
     }
 
     public boolean validateToken(String token) {
